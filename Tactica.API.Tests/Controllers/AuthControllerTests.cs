@@ -22,7 +22,13 @@ public class AuthControllerTests
     {
         var mockService = new Mock<IAuthService>();
         var request = new RegisterRequest { Email = "test@example.com", Password = "secure123" };
-        var expected = new AuthResponse { Email = request.Email, Token = "token123" };
+
+        var expected = new AuthResponse
+        {
+            Email = request.Email,
+            Token = "token123",
+            RefreshToken = "refresh123"
+        };
 
         mockService.Setup(s => s.RegisterAsync(request)).ReturnsAsync(expected);
 
@@ -31,8 +37,10 @@ public class AuthControllerTests
 
         var okResult = Assert.IsType<OkObjectResult>(result);
         var data = Assert.IsType<AuthResponse>(okResult.Value);
+
         Assert.Equal(request.Email, data.Email);
         Assert.Equal(expected.Token, data.Token);
+        Assert.Equal(expected.RefreshToken, data.RefreshToken);
     }
 
     /// <summary>
@@ -104,5 +112,56 @@ public class AuthControllerTests
 
         var payload = Assert.IsType<Dictionary<string, string>>(unauthorized.Value);
         Assert.Equal("Invalid credentials.", payload["error"]);
+    }
+
+    /// <summary>
+    /// Ensures that a valid refresh token returns new tokens.
+    /// </summary>
+    [Fact]
+    public async Task Refresh_ReturnsOk_WhenTokenIsValid()
+    {
+        var mockService = new Mock<IAuthService>();
+        var request = new RefreshTokenRequest { RefreshToken = "valid-refresh-token" };
+
+        var expected = new AuthResponse
+        {
+            Email = "user@example.com",
+            Token = "new-access-token",
+            RefreshToken = "new-refresh-token"
+        };
+
+        mockService.Setup(s => s.RefreshTokenAsync(request.RefreshToken))
+            .ReturnsAsync(expected);
+
+        var controller = new AuthController(mockService.Object);
+        var result = await controller.Refresh(request);
+
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var data = Assert.IsType<AuthResponse>(okResult.Value);
+
+        Assert.Equal(expected.Email, data.Email);
+        Assert.Equal(expected.Token, data.Token);
+        Assert.Equal(expected.RefreshToken, data.RefreshToken);
+    }
+
+    /// <summary>
+    /// Ensures that an invalid or expired refresh token returns 401 Unauthorized.
+    /// </summary>
+    /// <returns></returns>
+    [Fact]
+    public async Task Refresh_ReturnsUnauthorized_WhenTokenIsInvalid()
+    {
+        var mockService = new Mock<IAuthService>();
+        var request = new RefreshTokenRequest { RefreshToken = "invalid-refresh-token" };
+
+        mockService.Setup(s => s.RefreshTokenAsync(request.RefreshToken))
+            .ThrowsAsync(new UnauthorizedAccessException("Invalid or expired refresh token."));
+
+        var controller = new AuthController(mockService.Object);
+        var result = await controller.Refresh(request);
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
+        var payload = Assert.IsType<Dictionary<string, string>>(unauthorized.Value);
+        Assert.Equal("Invalid or expired refresh token.", payload["error"]);
     }
 }

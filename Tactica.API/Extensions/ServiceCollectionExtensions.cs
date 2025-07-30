@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPasswordHasher, Sha256PasswordHasher>();
         services.AddScoped<ITokenService, JwtTokenService>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
         return services;
     }

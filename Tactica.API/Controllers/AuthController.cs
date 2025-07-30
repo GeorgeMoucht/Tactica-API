@@ -56,4 +56,26 @@ public class AuthController : ControllerBase
             }});
         }
     }
+
+    /// <summary>
+    /// Refreshes the access token using a valid refresh tokn.
+    /// </summary>
+    /// <param name="request">The refresh token request.</param>
+    /// <returns>Returns a new access token and refresh token.</returns>
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+    {
+        try
+        {
+            var response = await _authService.RefreshTokenAsync(request.RefreshToken);
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new Dictionary<string, string>
+            {
+                ["error"] = ex.Message
+            });
+        }
+    }
 }

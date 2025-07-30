@@ -13,4 +13,10 @@ public interface ITokenService
     /// <param name="user">The user for whom the token is generated.</param>
     /// <returns>A signed JWT token string.</returns>
     string GenerateToken(User user);
+
+    /// <summary>
+    /// Generates a cryptographically secure refresh token string.
+    /// </summary>
+    /// <returns></returns>
+    string GenerateSecureRefreshToken();
 }

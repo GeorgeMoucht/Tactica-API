@@ -19,4 +19,9 @@ public class AppDbContext : DbContext
     /// Represents the Users table in the database.
     /// </summary>
     public DbSet<User> Users => Set<User>();
+
+    /// <summary>
+    /// Represent a refresh token table in the database.
+    /// </summary>
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 }

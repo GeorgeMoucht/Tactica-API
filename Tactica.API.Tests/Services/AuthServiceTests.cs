@@ -15,9 +15,14 @@ public class AuthServiceTest
     private readonly Mock<IUserRepository> _mockRepo = new();
     private readonly Mock<IPasswordHasher> _mockHasher = new();
     private readonly Mock<ITokenService> _mockToken = new();
+    private readonly Mock<IRefreshTokenRepository> _mockRefreshTokenRepo = new();
 
-    private AuthService CreateService() =>
-        new AuthService(_mockRepo.Object, _mockHasher.Object, _mockToken.Object);
+    private AuthService CreateService() => new AuthService(
+        _mockRepo.Object,
+        _mockHasher.Object,
+        _mockToken.Object,
+        _mockRefreshTokenRepo.Object
+    );
 
     /// <summary>
     /// Verifies that RegisterAsync throws an InvalidOperationException
@@ -42,8 +47,8 @@ public class AuthServiceTest
     }
 
     /// <summary>
-    /// Verifies that RegisterAsync returns a token when registration is
-    /// successful.
+    /// Verifies that RegisterAsync returns a token when 
+    /// registration is successful.
     /// </summary>
     /// <returns></returns>
     [Fact]
@@ -58,7 +63,13 @@ public class AuthServiceTest
         _mockToken.Setup(t => t.GenerateToken(It.IsAny<User>()))
                   .Returns("mock-token");
 
+        _mockToken.Setup(t => t.GenerateSecureRefreshToken())
+                  .Returns("mock-refresh-token");
+
         _mockRepo.Setup(r => r.AddUserAsync(It.IsAny<User>()))
+                 .Returns(Task.CompletedTask);
+
+        _mockRefreshTokenRepo.Setup(r => r.SaveAsync(It.IsAny<RefreshToken>()))
                  .Returns(Task.CompletedTask);
 
         var service = CreateService();
@@ -73,6 +84,7 @@ public class AuthServiceTest
 
         Assert.Equal(request.Email, result.Email);
         Assert.Equal("mock-token", result.Token);
+        Assert.Equal("mock-refresh-token", result.RefreshToken);
     }
 
     /// <summary>
@@ -165,5 +177,66 @@ public class AuthServiceTest
 
         Assert.Equal(request.Email, result.Email);
         Assert.Equal("valid-token", result.Token);
+    }
+
+    /// <summary>
+    /// Verifies that RefreshTokenAsync throws an
+    /// UnauthorizedAccessException when the refresh token is
+    /// invalid or expired.
+    /// </summary>
+    /// <returns></returns>
+    [Fact]
+    public async Task RefreshTokenAsync_Throws_WhenInvalidOrExpired()
+    {
+        var service = CreateService();
+
+        _mockRefreshTokenRepo.Setup(r => r.GetByTokenAsync("invalid-token"))
+                             .ReturnsAsync((RefreshToken?)null);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.RefreshTokenAsync("invalid-token"));
+    }
+
+    /// <summary>
+    /// Verifies that RefreshTokenAsync succeeds and returns new tokens
+    /// when the provided refresh token is valid and not expired.
+    /// </summary>
+    /// <returns></returns>
+    [Fact]
+    public async Task RefreshTokenAsync_Succeeds_AndReturnsNewTokens()
+    {
+        var user = new User { Id = 1, Email = "refresh@example.com" };
+
+        var oldToken = new RefreshToken
+        {
+            Token = "valid-token",
+            UserId = user.Id,
+            User = user,
+            IsRevoked = false,
+            ExpiresAt = DateTime.UtcNow.AddDays(1)
+        };
+
+        _mockRefreshTokenRepo.Setup(r => r.GetByTokenAsync("valid-token"))
+                .ReturnsAsync(oldToken);
+
+        _mockRefreshTokenRepo.Setup(r => r.RevokeAsync(oldToken))
+                .Returns(Task.CompletedTask);
+
+        _mockToken.Setup(t => t.GenerateToken(user))
+                .Returns("new-jwt");
+
+        _mockToken.Setup(t => t.GenerateSecureRefreshToken())
+                .Returns("mock-refresh-token");
+
+        _mockRefreshTokenRepo.Setup(r => r.SaveAsync(It.IsAny<RefreshToken>()))
+                .Returns(Task.CompletedTask);
+
+
+        var service = CreateService();
+        var result = await service.RefreshTokenAsync("valid-token");
+
+        Assert.Equal(user.Email, result.Email);
+        Assert.Equal("new-jwt", result.Token);
+        Assert.Equal("mock-refresh-token", result.RefreshToken); 
     }
 }
